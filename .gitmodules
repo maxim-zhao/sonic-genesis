@@ -1,0 +1,4 @@
+[submodule "Sonic1-Z80-ASM"]
+	path = Sonic1-Z80-ASM
+	url = https://github.com/Kroc/Sonic1-Z80-ASM
+	branch = master
