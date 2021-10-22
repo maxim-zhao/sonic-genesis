@@ -14,6 +14,9 @@ banksize $4000
 banks 32
 .endro
 
+; We replace the tile compression
+.define USE_PSGCOMPR
+
 .background "sonic.sms"
 
 ; Unused areas for our hacks...
@@ -25,8 +28,7 @@ banks 32
 
 ; Definitions for memory and functions from the game...
 .define RAM_CURRENT_LEVEL $D23E
-.define decompressArt     $0405
-
+.define RAM_TEMP1         $D20E
 
 ; Helper macros for ROM hacking...
 
@@ -126,18 +128,18 @@ PatchAt\1:
   patchArtLoad $26b6 TitleScreenAnimatedFingerSprites 256
   
   ; End sign sprites
-  patchArtLoad $5f2d EndSignSprites 128
+  patchArtLoad $5f2d EndSignSprites 256
   
   ; Bosses
-  patchArtLoad $7031 BossSprites 128
-  patchArtLoad $8074 BossSprites 128
-  patchArtLoad $84bc BossSprites2 128
-  patchArtLoad $9291 BossSprites2 128
-  patchArtLoad $a816 BossSprites3 128
-  patchArtLoad $bb94 BossSprites3 128
+  patchArtLoad $7031 BossSprites 256
+  patchArtLoad $8074 BossSprites 256
+  patchArtLoad $84bc BossSprites2 256
+  patchArtLoad $9291 BossSprites2 256
+  patchArtLoad $a816 BossSprites3 256
+  patchArtLoad $bb94 BossSprites3 256
   
-  ; Trapped enemies sprites
-  patchArtLoad $7916 TrappedAnimalsSprites 128
+  ; Trapped animals sprites
+  patchArtLoad $7916 TrappedAnimalsSprites 256
   
   ; Level art needs to be patched differently.
   ; The game data stores it with only addresses, and assumes it will all be packed together in bank 12.
@@ -147,7 +149,7 @@ PatchAt\1:
   ; Sprite pointer is at +24
   
   
-.define ArtTilesTableLocation $40000
+.define ArtTilesTableLocation $26000 ; Start of art data
   ROMPosition ArtTilesTableLocation 1 ; slot 1
 .section "ArtTilesTable" force
 ArtTilesTable:
@@ -232,7 +234,11 @@ SetArtBank:
 .section "\3" superfree
 .endif
 \3:
+.ifdef USE_PSGCOMPR
+  .incbin "\3.psgcompr"
+.else
   .incbin "\3.soniccompr"
+.endif
 .ends
 .endm
   replaceData $26000 $2751e TitleScreenTiles
@@ -263,3 +269,52 @@ SetArtBank:
   replaceData $3da28 $3e507 TrappedAnimalsSprites
   replaceData $3e508 $3ef3e BossSprites2
   replaceData $3ef3f $3f9ec BossSprites3
+  
+.ifdef USE_PSGCOMPR
+; Now we replace the compression function!
+.unbackground $0405 $0500
+.bank 0 slot 0
+.section "Art decompressor" free
+decompressArt:
+  ; hl = source (relative to start of bank)
+  ; de = dest (write bit not set)
+  ; a = bank
+  ; First remember the current pages
+  ld (RAM_TEMP1),a
+  ld bc,($fffe)
+  push bc
+  push ix
+    ; Select the right page
+    ld a,(RAM_TEMP1)
+    ld ($ffff),a
+    ; We trampoline to it because it is too large to fit...
+    ld a,:PSGaiden_tile_decompr
+    ld ($fffe),a
+    ; Make hl an absolute address for slot 2
+    set 7,h
+    ; And make de a write address
+    set 6,d
+    ; Do the decompression
+    bit 1, (iy+9)
+    jr nz,+
+    di
+      call PSGaiden_tile_decompr
+    ei
+    jr +
+    ; No di/ei version
+    call PSGaiden_tile_decompr
++:pop ix
+  pop bc
+  ; restore pages
+  ld ($fffc),a
+	res	1, (iy+9) ; game does this
+  ret
+  
+.ends
+
+.slot 1
+.define PSGaiden_decomp_buffer $d500 ; TODO find a better place? 32B needed
+.include "Phantasy_Star_Gaiden_decompressor_(fast).asm"
+.else
+.define decompressArt $0405 ; Original code
+.endif

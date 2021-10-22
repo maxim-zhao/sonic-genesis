@@ -16,6 +16,9 @@ include sonic-genesis.sms.makefile
 %.soniccompr: art/%.png
 	 bmp2tile "$<" -noremoveduplicates -savetiles "$@"
 
+%.psgcompr: art/%.png
+	 bmp2tile "$<" -noremoveduplicates -savetiles "$@"
+
 sonic-genesis.sms.o: sonic-genesis.sms.asm
 	$(WLA-Z80) -o $@ $<
 

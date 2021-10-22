@@ -1,2 +1,7 @@
-/source/sonic.sms
 /tools/
+*.sms
+*.psgcompr
+*.soniccompr
+*.makefile
+*.o
+*.sym
