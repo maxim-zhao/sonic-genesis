@@ -15,7 +15,7 @@ banks 32
 .endro
 
 ; We replace the tile compression
-.define USE_PSGCOMPR
+;.define USE_PSGCOMPR
 
 .background "sonic.sms"
 
@@ -29,6 +29,42 @@ banks 32
 ; Definitions for memory and functions from the game...
 .define RAM_CURRENT_LEVEL $D23E
 .define RAM_TEMP1         $D20E
+
+; Definitions for structures from the game...
+.struct LevelHeader
+  Solidity            db
+  FloorWidth          dw
+  FloorHeight         dw
+  CropLeft            db
+  LevelXOffset        db
+  Unknown1            db
+  LevelWidth          db
+  CropTop             db
+  LevelYOffset        db
+  ExtendHeight        db
+  LevelHeight         db
+  StartX              db
+  StartY              db
+  FloorLayout         dw
+  FloorSize           dw
+  BlockMappings       dw
+  LevelArt            dw
+  SpriteBank          db
+  SpriteArt           dw
+  InitialPalette      db
+  CycleSpeed          db
+  CycleCount          db
+  CyclePalette        db
+  ObjectLayout        dw
+  ScrollingRingFlags  db
+  UnderwaterFlag      db
+  TimeLightningFlags  db
+  Unknown2            db
+  Music               db
+.endst
+.enum $155CA
+  LevelHeaders instanceof LevelHeader 32
+.ende
 
 ; Helper macros for ROM hacking...
 
@@ -71,9 +107,11 @@ PatchAt\1:
 
 
 ; Now we start to remove and replace artwork...
-; artwork is compressed using "Sonic compression".
-; The decompression routine is at offset $0405.
-; We are not replacing it (yet).
+; We want to find all the palces where it is loaded and
+; 1. Replace the reference with a label
+; 2. Mark the old data space as unused
+; 3. Insert the new data
+; This way the data can be moved around and the assembler sorts it all out.
 
 ; art loading is often like this:
 /*
@@ -97,6 +135,9 @@ PatchAt\1:
 .endm
 
   ; We patch these...
+  ; Background tiles are always loaded at tile 0
+  ; Sprites are always loaded at tile 256
+  ; Except the HUD tiles which are at tile 384 
   ; Title screen
   patchArtLoad $1296 TitleScreenTiles 0
   patchArtLoad $12a1 TitleScreenAnimatedFingerSprites 256
@@ -114,11 +155,11 @@ PatchAt\1:
   ; Level done
   patchArtLoad $1411 SonicHasPassedTiles 0
 
-  patchArtLoad $1575 HUDSprites 256
+  patchArtLoad $1575 HUDSprites 384
   patchArtLoad $1580 SonicHasPassedTiles 0
 
   ; Level loader
-  patchArtLoad $2172 HUDSprites 256
+  patchArtLoad $2172 HUDSprites 384
   
   ; End sequence (?)
   patchArtLoad $25a9 MapScreen1Tiles 0
@@ -149,16 +190,20 @@ PatchAt\1:
   ; Sprite pointer is at +24
   
   
+; We have to set this at an absolute address because WLA DX can't figure it out on its own.
 .define ArtTilesTableLocation $26000 ; Start of art data
-  ROMPosition ArtTilesTableLocation 1 ; slot 1
-.section "ArtTilesTable" force
+  ROMPosition ArtTilesTableLocation 1
+.section "ArtTilesTable" force  
 ArtTilesTable:
-  .dsb 33, 0 ; will overwrite later
+  ; Data will be overwritten here by the macro below
+  .dsb 32 0
 SetArtBank:
   ld a,(RAM_CURRENT_LEVEL)
   push hl
     ld l,a
-    ld h,>ArtTilesTable ; as it is 256-aligned anyway
+    ld h,0
+    ld de,ArtTilesTable
+    add hl,de
     ld a,(hl) ; Bank number
   pop hl
   ld de,0 ; Destination
@@ -166,10 +211,10 @@ SetArtBank:
 .ends
 
 .macro patchLevelHeader args index, tilesLabel, spritesLabel
-  PatchW ArtTilesTableLocation+index, :tilesLabel
-  PatchW $155CA+index*37+21, tilesLabel
-  PatchB $155CA+index*37+23, :spritesLabel
-  PatchW $155CA+index*37+24, spritesLabel
+  PatchW LevelHeaders + index * _sizeof_LevelHeader + LevelHeader.LevelArt,  tilesLabel
+  PatchW LevelHeaders + index * _sizeof_LevelHeader + LevelHeader.SpriteArt,  spritesLabel
+  PatchB LevelHeaders + index * _sizeof_LevelHeader + LevelHeader.SpriteBank,  :spritesLabel
+  PatchB ArtTilesTableLocation + index, :tilesLabel
 .endm
 
   patchLevelHeader  0, GreenHillArt,      GreenHillSprites
@@ -224,21 +269,16 @@ SetArtBank:
 .ends
 
 ; Then we put the art data in...
-.macro replaceData args offset, length, label, bank
+.macro replaceData args offset, length, label
 .unbackground offset, length
-.if NARGS == 4
-.bank bank slot 0
-.section "\3" free
-.else
 .slot 0 ; Sonic code wants to see labels as relative to the start of the bank
 .section "\3" superfree
-.endif
 \3:
 .ifdef USE_PSGCOMPR
   .incbin "\3.psgcompr"
 .else
   .incbin "\3.soniccompr"
-.endif
+.endif  
 .ends
 .endm
   replaceData $26000 $2751e TitleScreenTiles
@@ -317,4 +357,5 @@ decompressArt:
 .include "Phantasy_Star_Gaiden_decompressor_(fast).asm"
 .else
 .define decompressArt $0405 ; Original code
+.export decompressArt
 .endif

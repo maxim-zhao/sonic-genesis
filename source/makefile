@@ -1,7 +1,7 @@
 WLA-Z80 = wla-z80
 WLALINK = wlalink
 BMP2TILE = bmp2tile
-GENERATED_FILES = sonic-genesis.sms *.o *.makefile *.1bpp *.sym *.zip *.soniccompr
+GENERATED_FILES = sonic-genesis.sms *.o *.makefile *.1bpp *.sym *.zip *.soniccompr *.psgcompr
 7Z = 7z
 
 all: sonic-genesis.sms
