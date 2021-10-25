@@ -14,7 +14,7 @@ banksize $4000
 banks 32
 .endro
 
-; We replace the tile compression
+; We can replace the tile compression but this will of course break the level editor
 ;.define USE_PSGCOMPR
 
 .background "sonic.sms"
@@ -107,7 +107,7 @@ PatchAt\1:
 
 
 ; Now we start to remove and replace artwork...
-; We want to find all the palces where it is loaded and
+; We want to find all the places where it is loaded and
 ; 1. Replace the reference with a label
 ; 2. Mark the old data space as unused
 ; 3. Insert the new data
@@ -124,12 +124,12 @@ PatchAt\1:
 ; Offset is where the code is
 ; Source is where the compressed data is.
 ; Destination is the tile number, i.e. the address divided by 32
-.macro patchArtLoad args offset, source, destination
-  ROMPosition offset
+.macro patchArtLoad args _offset, _source, _destination
+  ROMPosition _offset
 .section "Artwork patch for \2 \@" overwrite
-  ld hl, source
-  ld de, destination*32
-  ld a, :source
+  ld hl, _source
+  ld de, _destination*32
+  ld a, :_source
   call decompressArt
 .ends
 .endm
@@ -183,20 +183,20 @@ PatchAt\1:
   patchArtLoad $7916 TrappedAnimalsSprites 256
   
   ; Level art needs to be patched differently.
-  ; The game data stores it with only addresses, and assumes it will all be packed together in bank 12.
-  ; Level headers are from $155CA, 37 bytes each.
+  ; The game data stores it with only offsets to bank 12.
+  ; Level headers are from $155CA, 37 bytes each, not in game order.
+  ; Game order comes from a table at $15580 that points into this area.
   ; Tile pointer is at +21
   ; Sprite bank is at +23
   ; Sprite pointer is at +24
-  
-  
+
 ; We have to set this at an absolute address because WLA DX can't figure it out on its own.
 .define ArtTilesTableLocation $26000 ; Start of art data
   ROMPosition ArtTilesTableLocation 1
 .section "ArtTilesTable" force  
 ArtTilesTable:
   ; Data will be overwritten here by the macro below
-  .dsb 32 0
+  .dsb 36 0
 SetArtBank:
   ld a,(RAM_CURRENT_LEVEL)
   push hl
@@ -210,49 +210,49 @@ SetArtBank:
   jp decompressArt ; continue to the patched call
 .ends
 
-.macro patchLevelHeader args index, tilesLabel, spritesLabel
-  PatchW LevelHeaders + index * _sizeof_LevelHeader + LevelHeader.LevelArt,  tilesLabel
-  PatchW LevelHeaders + index * _sizeof_LevelHeader + LevelHeader.SpriteArt,  spritesLabel
-  PatchB LevelHeaders + index * _sizeof_LevelHeader + LevelHeader.SpriteBank,  :spritesLabel
-  PatchB ArtTilesTableLocation + index, :tilesLabel
+.macro patchLevelHeader args levelNumber, headerOffset, tilesLabel, spritesLabel
+  PatchB ArtTilesTableLocation + levelNumber,    :tilesLabel
+  PatchW headerOffset + LevelHeader.LevelArt,   tilesLabel
+  PatchB headerOffset + LevelHeader.SpriteBank, :spritesLabel
+  PatchW headerOffset + LevelHeader.SpriteArt,  spritesLabel
 .endm
 
-  patchLevelHeader  0, GreenHillArt,      GreenHillSprites
-  patchLevelHeader  1, GreenHillArt,      GreenHillSprites
-  patchLevelHeader  2, GreenHillArt,      GreenHillSprites
-  patchLevelHeader  3, BridgeArt,         BridgeSprites
-  patchLevelHeader  4, BridgeArt,         BridgeSprites
-  patchLevelHeader  5, BridgeArt,         BridgeSprites
-  patchLevelHeader  6, JungleArt,         JungleSprites
-  patchLevelHeader  7, JungleArt,         JungleSprites
-  patchLevelHeader  8, JungleArt,         JungleSprites
-  patchLevelHeader  9, LabyrinthArt,      LabyrinthSprites
-  patchLevelHeader 10, LabyrinthArt,      LabyrinthSprites
-  patchLevelHeader 11, LabyrinthArt,      LabyrinthSprites
-  patchLevelHeader 12, ScrapBrainArt,     ScrapBrainSprites
-  patchLevelHeader 13, ScrapBrainArt,     ScrapBrainSprites
-  patchLevelHeader 14, ScrapBrainArt,     ScrapBrainSprites
-  patchLevelHeader 15, SkyBase1_2Art,     SkyBaseSprites
-  patchLevelHeader 16, SkyBase1_2Art,     SkyBaseSprites
-  patchLevelHeader 17, SkyBase3Art,       SkyBaseSprites
-  patchLevelHeader 18, GreenHillArt,      GreenHillSprites ; Ending sequence
-  patchLevelHeader 19, ScrapBrainArt,     ScrapBrainSprites ; Scrap Brain interiors
-  patchLevelHeader 20, ScrapBrainArt,     ScrapBrainSprites
-  patchLevelHeader 21, ScrapBrainArt,     ScrapBrainSprites
-  patchLevelHeader 22, ScrapBrainArt,     ScrapBrainSprites
-  patchLevelHeader 23, ScrapBrainArt,     ScrapBrainSprites
-  patchLevelHeader 24, ScrapBrainArt,     ScrapBrainSprites
-  patchLevelHeader 25, SkyBase3Art,       SkyBaseSprites
-  patchLevelHeader 26, SpecialStagesArt, SpecialStageSprites
-  patchLevelHeader 27, SpecialStagesArt, SpecialStageSprites
-  patchLevelHeader 28, SpecialStagesArt, SpecialStageSprites
-  patchLevelHeader 29, SpecialStagesArt, SpecialStageSprites
-  patchLevelHeader 30, SpecialStagesArt, SpecialStageSprites
-  patchLevelHeader 31, SpecialStagesArt, SpecialStageSprites
-  ; TODO:
-  ; - More places
-  ; - Resolve issue that data doesn't fit in one bank!
-  ;   The game cheats. I think I should patch it to just store them sensibly.
+  patchLevelHeader  0, $155CA, GreenHillArt,      GreenHillSprites
+  patchLevelHeader  1, $155EF, GreenHillArt,      GreenHillSprites
+  patchLevelHeader  2, $15614, GreenHillArt,      GreenHillSprites
+  patchLevelHeader  3, $1565E, BridgeArt,         BridgeSprites
+  patchLevelHeader  4, $15683, BridgeArt,         BridgeSprites
+  patchLevelHeader  5, $156A8, BridgeArt,         BridgeSprites
+  patchLevelHeader  6, $156CD, JungleArt,         JungleSprites
+  patchLevelHeader  7, $156F2, JungleArt,         JungleSprites
+  patchLevelHeader  8, $15717, JungleArt,         JungleSprites
+  patchLevelHeader  9, $1573C, LabyrinthArt,      LabyrinthSprites
+  patchLevelHeader 10, $15761, LabyrinthArt,      LabyrinthSprites
+  patchLevelHeader 11, $15786, LabyrinthArt,      LabyrinthSprites
+  patchLevelHeader 12, $157AB, ScrapBrainArt,     ScrapBrainSprites
+  patchLevelHeader 13, $157D0, ScrapBrainArt,     ScrapBrainSprites
+  patchLevelHeader 14, $1583F, ScrapBrainArt,     ScrapBrainSprites
+  patchLevelHeader 15, $158F8, SkyBase1_2Art,     SkyBaseSprites
+  patchLevelHeader 16, $1591D, SkyBase1_2Art,     SkyBaseSprites
+  patchLevelHeader 17, $15942, SkyBase3Art,       SkyBaseSprites
+  patchLevelHeader 18, $15639, GreenHillArt,      GreenHillSprites ; Ending sequence
+  ; Index 19 unused
+  patchLevelHeader 20, $157F5, ScrapBrainArt,     ScrapBrainSprites ; Scrap Brain interiors
+  patchLevelHeader 21, $1581A, ScrapBrainArt,     ScrapBrainSprites
+  patchLevelHeader 22, $158AE, ScrapBrainArt,     ScrapBrainSprites
+  patchLevelHeader 23, $158D3, ScrapBrainArt,     ScrapBrainSprites
+  patchLevelHeader 24, $15864, ScrapBrainArt,     ScrapBrainSprites
+  patchLevelHeader 25, $15889, ScrapBrainArt,     ScrapBrainSprites
+  patchLevelHeader 26, $15967, SkyBase3Art,       SkyBaseSprites
+  ; Index 27 unused
+  patchLevelHeader 28, $1598C, SpecialStagesArt, SpecialStageSprites
+  patchLevelHeader 29, $159B1, SpecialStagesArt, SpecialStageSprites
+  patchLevelHeader 30, $159D6, SpecialStagesArt, SpecialStageSprites
+  patchLevelHeader 31, $159FB, SpecialStagesArt, SpecialStageSprites
+  patchLevelHeader 32, $15A20, SpecialStagesArt, SpecialStageSprites
+  patchLevelHeader 33, $15A45, SpecialStagesArt, SpecialStageSprites
+  patchLevelHeader 34, $15A6A, SpecialStagesArt, SpecialStageSprites
+  patchLevelHeader 35, $15A8F, SpecialStagesArt, SpecialStageSprites
 
 ; The game expects to fit all art near bank 12, and thus doesn't bother storing bank numbers for it.
 ; I want to change that...
@@ -266,6 +266,7 @@ SetArtBank:
   ld a,:SetArtBank
   ld ($fffe),a
   call SetArtBank
+  ; Exact fit
 .ends
 
 ; Then we put the art data in...
