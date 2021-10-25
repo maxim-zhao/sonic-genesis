@@ -4,7 +4,7 @@ BMP2TILE = bmp2tile
 GENERATED_FILES = sonic-genesis.sms *.o *.makefile *.1bpp *.sym *.zip *.soniccompr *.psgcompr
 7Z = 7z
 
-all: sonic-genesis.sms
+all: patch
 
 # We get WLA DX to generate the dependencies list for our source
 sonic-genesis.sms.makefile: sonic-genesis.sms.asm
@@ -24,6 +24,9 @@ sonic-genesis.sms.o: sonic-genesis.sms.asm
 
 sonic-genesis.sms: sonic-genesis.sms.o linkfile
 	$(WLALINK) -d -r -v -S -A linkfile $@
+
+patch: sonic-genesis.sms sonic.sms
+	flips --create sonic.sms sonic-genesis.sms sonic-genesis.bps
 
 play: sonic-genesis.sms
 	cmd /c start sonic-genesis.sms
