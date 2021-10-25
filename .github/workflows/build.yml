@@ -1,0 +1,38 @@
+name: CI
+
+on: [push, pull_request]
+
+jobs:
+  build:
+    name: build
+    runs-on: windows-latest
+
+    steps:
+    - name: checkout
+      uses: actions/checkout@v2
+
+    - name: get tools
+      shell: pwsh
+      run: |
+        Invoke-WebRequest -Uri https://github.com/maxim-zhao/sms-build-tools/releases/download/1.0.97/tools.7z -OutFile tools.7z
+        7z x tools.7z -otools
+
+    - name: get rom
+      shell: pwsh
+      run: |
+        Invoke-WebRequest -Uri ${{ secrets.ROM_URL }} -OutFile rom.7z
+        7z x rom.7z -osource
+
+    - name: build
+      shell: cmd
+      working-directory: source
+      run: |
+        path ..\tools;%path%
+        make all
+
+    - uses: actions/upload-artifact@v2
+      with:
+        name: stuff
+        path: |
+          source\sonic-genesis.bps
+          source\sonic-genesis.sym
